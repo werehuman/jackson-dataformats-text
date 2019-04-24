@@ -1,0 +1,6 @@
+- childrenList:
+  - &reference
+    stringField: initial object
+  - &reference
+    stringField: overridden object
+- *reference

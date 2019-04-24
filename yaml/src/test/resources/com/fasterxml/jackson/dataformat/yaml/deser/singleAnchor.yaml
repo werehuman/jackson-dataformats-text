@@ -1,0 +1,12 @@
+- &reference
+  intField: &intFieldRef 123
+  longField: &longFieldRef 123456789
+  floatField: &floatFieldRef 2.718281828
+  doubleField: &doubleFieldRef 2.718281828
+  bigIntegerField: &bigIntegerFieldRef 1234567890123456789012345678901234567890
+  booleanField: &booleanFieldRef true
+  stringField: &stringFieldRef hello world
+  singleChild: null
+  childrenList: null
+  childrenMap: null
+- *reference

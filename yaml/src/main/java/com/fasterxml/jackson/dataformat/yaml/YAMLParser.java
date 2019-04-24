@@ -3,6 +3,7 @@ package com.fasterxml.jackson.dataformat.yaml;
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Iterator;
 import java.util.regex.Pattern;
 
 import org.yaml.snakeyaml.error.Mark;
@@ -34,7 +35,7 @@ public class YAMLParser extends ParserBase
 
         final boolean _defaultState;
         final int _mask;
-        
+
         /**
          * Method that calculates bit set (flags) of all features that
          * are enabled by default.
@@ -49,16 +50,16 @@ public class YAMLParser extends ParserBase
             }
             return flags;
         }
-        
+
         private Feature(boolean defaultState) {
             _defaultState = defaultState;
             _mask = (1 << ordinal());
         }
-        
+
         @Override
         public boolean enabledByDefault() { return _defaultState; }
         @Override
-        public boolean enabledIn(int flags) { return (flags & _mask) != 0; }        
+        public boolean enabledIn(int flags) { return (flags & _mask) != 0; }
         @Override
         public int getMask() { return _mask; }
     }
@@ -78,7 +79,7 @@ public class YAMLParser extends ParserBase
     /* Configuration
     /**********************************************************************
      */
-    
+
     /**
      * Codec used for data binding when (if) requested.
      */
@@ -122,7 +123,7 @@ public class YAMLParser extends ParserBase
      * mostly free of underscores
      */
     protected String _cleanedTextValue;
-    
+
     /**
      * Let's also have a local copy of the current field name
      */
@@ -131,28 +132,31 @@ public class YAMLParser extends ParserBase
     /**
      * Flag that is set when current token was derived from an Alias
      * (reference to another value's anchor)
-     * 
+     *
      * @since 2.1
      */
-    protected boolean _currentIsAlias;
+    //protected boolean _currentIsAlias;
 
     /**
      * Anchor for the value that parser currently points to: in case of
      * structured types, value whose first token current token is.
      */
-    protected String _currentAnchor;
-    
+    //protected String _currentAnchor;
+
+    protected final AnchorTracker _anchorTracker = new AnchorTracker();
+    protected Iterator<AnchorTracker.JsonTokenWithPayload> _tokensFromAnchor;
+
     /*
     /**********************************************************************
     /* Life-cycle
     /**********************************************************************
      */
-    
+
     public YAMLParser(IOContext ctxt, BufferRecycler br,
             int parserFeatures, int formatFeatures,
             ObjectCodec codec, Reader reader)
     {
-        super(ctxt, parserFeatures);    
+        super(ctxt, parserFeatures);
         _objectCodec = codec;
         _formatFeatures = formatFeatures;
         _reader = reader;
@@ -176,26 +180,26 @@ public class YAMLParser extends ParserBase
     /**********************************************************                              
      */
 
-    /**
-     * Method that can be used to check whether current token was
-     * created from YAML Alias token (reference to an anchor).
-     * 
-     * @since 2.1
-     */
-    public boolean isCurrentAlias() {
-        return _currentIsAlias;
-    }
+//    /**
+//     * Method that can be used to check whether current token was
+//     * created from YAML Alias token (reference to an anchor).
+//     *
+//     * @since 2.1
+//     */
+//    public boolean isCurrentAlias() {
+//        return _currentIsAlias;
+//    }
 
     /**
      * Method that can be used to check if the current token has an
      * associated anchor (id to reference via Alias)
-     * 
+     *
      * @deprecated Since 2.3 (was added in 2.1) -- use {@link #getObjectId} instead
      */
-    @Deprecated
-    public String getCurrentAnchor() {
-        return _currentAnchor;
-    }
+//    @Deprecated
+//    public String getCurrentAnchor() {
+//        return _currentAnchor;
+//    }
     
     /*                                                                                       
     /**********************************************************                              
@@ -227,7 +231,7 @@ public class YAMLParser extends ParserBase
             _reader.close();
         }
     }
-    
+
     /*
     /**********************************************************                              
     /* FormatFeature support
@@ -318,7 +322,7 @@ public class YAMLParser extends ParserBase
         }
         return _locationFor(_lastEvent.getEndMark());
     }
-    
+
     protected JsonLocation _locationFor(Mark m)
     {
         if (m == null) {
@@ -343,7 +347,15 @@ public class YAMLParser extends ParserBase
     @Override
     public JsonToken nextToken() throws IOException
     {
-        _currentIsAlias = false;
+        if (_tokensFromAnchor != null) {
+            if (_tokensFromAnchor.hasNext()) {
+                return _updateFromToken(_tokensFromAnchor.next());
+            } else {
+                _tokensFromAnchor = null;
+            }
+        }
+
+        //_currentIsAlias = false;
         _binaryValue = null;
         if (_closed) {
             return null;
@@ -362,7 +374,7 @@ public class YAMLParser extends ParserBase
             }
             // is null ok? Assume it is, for now, consider to be same as end-of-doc
             if (evt == null) {
-                _currentAnchor = null;
+                //_currentAnchor = null;
                 return (_currToken = null);
             }
             _lastEvent = evt;
@@ -372,14 +384,14 @@ public class YAMLParser extends ParserBase
             if (_parsingContext.inObject()) {
                 if (_currToken != JsonToken.FIELD_NAME) {
                     if (!evt.is(Event.ID.Scalar)) {
-                        _currentAnchor = null;
+                        //_currentAnchor = null;
                         // end is fine
                         if (evt.is(Event.ID.MappingEnd)) {
                             if (!_parsingContext.inObject()) { // sanity check is optional, but let's do it for now
                                 _reportMismatchedEndMarker('}', ']');
                             }
                             _parsingContext = _parsingContext.getParent();
-                            return (_currToken = JsonToken.END_OBJECT);
+                            return _feedAnchorTracker(JsonToken.END_OBJECT, evt);
                         }
                         _reportError("Expected a field name (Scalar value in YAML), got this instead: "+evt);
                     }
@@ -390,52 +402,47 @@ public class YAMLParser extends ParserBase
                     //  ... not even 100% sure this is correct, or robust, but does appear to work for specific
                     //  test case given.
                     final ScalarEvent scalar = (ScalarEvent) evt;
-                    final String newAnchor = scalar.getAnchor();
-                    if ((newAnchor != null) || (_currToken != JsonToken.START_OBJECT)) {
-                        _currentAnchor = scalar.getAnchor();
-                    }
+//                    final String newAnchor = scalar.getAnchor();
+//                    if ((newAnchor != null) || (_currToken != JsonToken.START_OBJECT)) {
+//                        _currentAnchor = scalar.getAnchor();
+//                    }
                     final String name = scalar.getValue();
                     _currentFieldName = name;
                     _parsingContext.setCurrentName(name);
-                    return (_currToken = JsonToken.FIELD_NAME);
+                    return _feedAnchorTracker(JsonToken.FIELD_NAME, evt);
                 }
             }
 
-            _currentAnchor = null;
-
             // Ugh. Why not expose id, to be able to Switch?
-            _currentAnchor = null;
+            // _currentAnchor = null;
 
             // scalar values are probably the commonest:
             if (evt.is(Event.ID.Scalar)) {
                 JsonToken t = _decodeScalar((ScalarEvent) evt);
-                _currToken = t;
-                return t;
+                return _feedAnchorTracker(t, evt);
             }
 
             // followed by maps, then arrays
             if (evt.is(Event.ID.MappingStart)) {
                 Mark m = evt.getStartMark();
                 MappingStartEvent map = (MappingStartEvent) evt;
-                _currentAnchor = map.getAnchor();
                 _parsingContext = _parsingContext.createChildObjectContext(m.getLine(), m.getColumn());
-                return (_currToken = JsonToken.START_OBJECT);
+                return _feedAnchorTracker(JsonToken.START_OBJECT, evt);
             }
             if (evt.is(Event.ID.MappingEnd)) { // actually error; can not have map-end here
                 _reportError("Not expecting END_OBJECT but a value");
             }
             if (evt.is(Event.ID.SequenceStart)) {
                 Mark m = evt.getStartMark();
-                _currentAnchor = ((NodeEvent)evt).getAnchor();
                 _parsingContext = _parsingContext.createChildArrayContext(m.getLine(), m.getColumn());
-                return (_currToken = JsonToken.START_ARRAY);
+                return _feedAnchorTracker(JsonToken.START_ARRAY, evt);
             }
             if (evt.is(Event.ID.SequenceEnd)) {
                 if (!_parsingContext.inArray()) { // sanity check is optional, but let's do it for now
                     _reportMismatchedEndMarker(']', '}');
                 }
                 _parsingContext = _parsingContext.getParent();
-                return (_currToken = JsonToken.END_ARRAY);
+                return _feedAnchorTracker(JsonToken.END_ARRAY, evt);
             }
 
             // after this, less common tokens:
@@ -453,12 +460,16 @@ public class YAMLParser extends ParserBase
                 continue;
             }
             if (evt.is(Event.ID.Alias)) {
-                AliasEvent alias = (AliasEvent) evt;
-                _currentIsAlias = true;
-                _textValue = alias.getAnchor();
-                _cleanedTextValue = null;
-                // for now, nothing to do: in future, maybe try to expose as ObjectIds?
-                return (_currToken = JsonToken.VALUE_STRING);
+                String anchor = ((AliasEvent) evt).getAnchor();
+                _tokensFromAnchor = _anchorTracker.getTokensForAnchor(anchor).iterator();
+                // TODO check that has next, it always should have
+                return _updateFromToken(_tokensFromAnchor.next());
+//                AliasEvent alias = (AliasEvent) evt;
+//                _currentIsAlias = true;
+//                _textValue = alias.getAnchor();
+//                _cleanedTextValue = null;
+//                // for now, nothing to do: in future, maybe try to expose as ObjectIds?
+//                return (_currToken = JsonToken.VALUE_STRING);
             }
             if (evt.is(Event.ID.StreamEnd)) { // end-of-input; force closure
                 close();
@@ -468,6 +479,35 @@ public class YAMLParser extends ParserBase
                 continue;
             }
         }
+    }
+
+    private JsonToken _updateFromToken(AnchorTracker.JsonTokenWithPayload source) throws IOException
+    {
+        _currToken = source.jsonToken;
+        if (source.scalarEvent != null) {
+            if (source.jsonToken == JsonToken.FIELD_NAME) {
+                _currentFieldName = source.scalarEvent.getValue();
+            } else {
+                _decodeScalar(source.scalarEvent);
+            }
+        }
+        _anchorTracker.feed(null, source.scalarEvent, _currToken);
+        return _currToken;
+    }
+
+    protected JsonToken _feedAnchorTracker(JsonToken result, Event event)
+    {
+        _currToken = result;
+        String anchor = null;
+        ScalarEvent scalarEvent = null;
+        if (event instanceof NodeEvent) {
+            anchor = ((NodeEvent) event).getAnchor();
+        }
+        if (event instanceof ScalarEvent) {
+            scalarEvent = (ScalarEvent) event;
+        }
+        _anchorTracker.feed(anchor, scalarEvent, _currToken);
+        return _currToken;
     }
 
     protected JsonToken _decodeScalar(ScalarEvent scalar) throws IOException
@@ -542,7 +582,7 @@ public class YAMLParser extends ParserBase
                 }
             }
         }
-        
+
         // any way to figure out actual type? No?
         return JsonToken.VALUE_STRING;
     }
@@ -629,11 +669,11 @@ public class YAMLParser extends ParserBase
             _numTypesValid = 0;
             return _cleanYamlFloat(_textValue);
         }
-        
+
         // 25-Aug-2016, tatu: If we can't actually match it to valid number,
         //    consider String; better than claiming there's not toekn
         return JsonToken.VALUE_STRING;
-    }   
+    }
 
     protected JsonToken _decodeIntWithUnderscores(String value, final int len)
     {
@@ -651,7 +691,7 @@ public class YAMLParser extends ParserBase
     public boolean hasTextCharacters() {
         return false;
     }
-    
+
     @Override
     public String getText() throws IOException
     {
@@ -737,7 +777,7 @@ public class YAMLParser extends ParserBase
     /* Number accessor overrides
     /**********************************************************************
      */
-    
+
     @Override
     protected void _parseNumericValue(int expType) throws IOException
     {
@@ -844,16 +884,17 @@ public class YAMLParser extends ParserBase
     public boolean canReadObjectId() { // yup
         return true;
     }
-    
+
     @Override
     public boolean canReadTypeId() {
         return true; // yes, YAML got 'em
     }
-    
+
     @Override
     public String getObjectId() throws IOException
     {
-        return _currentAnchor;
+        //return _currentAnchor;
+        return null;
     }
 
     @Override
@@ -883,7 +924,7 @@ public class YAMLParser extends ParserBase
     /* Internal methods
     /**********************************************************************
      */
-    
+
     /**
      * Helper method used to clean up YAML floating-point value so it can be parsed
      * using standard JDK classes.

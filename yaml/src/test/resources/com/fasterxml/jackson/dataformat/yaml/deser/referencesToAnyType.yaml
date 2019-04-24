@@ -1,0 +1,30 @@
+- intField: &intFieldRef 123
+  longField: &longFieldRef 123456789
+  floatField: &floatFieldRef 2.718281828
+  doubleField: &doubleFieldRef 2.718281828
+  bigIntegerField: &bigIntegerFieldRef 1234567890123456789012345678901234567890
+  booleanField: &booleanFieldRef true
+  stringField: &stringFieldRef hello world
+  singleChild:
+    &singleChild
+    stringField: single child
+  childrenList:
+    &childrenList
+    - stringField: children list 0
+    - stringField: children list 1
+  childrenMap:
+    &childrenMap
+    key0:
+      stringField: children map 0
+    key1:
+      stringField: children map 1
+- intField: *intFieldRef
+  longField: *longFieldRef
+  floatField: *floatFieldRef
+  doubleField: *doubleFieldRef
+  bigIntegerField: *bigIntegerFieldRef
+  booleanField: *booleanFieldRef
+  stringField: *stringFieldRef
+  singleChild: *singleChild
+  childrenList: *childrenList
+  childrenMap: *childrenMap

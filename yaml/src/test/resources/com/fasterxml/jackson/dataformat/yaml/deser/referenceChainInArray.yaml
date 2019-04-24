@@ -1,0 +1,21 @@
+- &reference0
+  intField: 123
+  longField: 123456789
+  floatField: 2.718281828
+  doubleField: 2.718281828
+  bigIntegerField: 1234567890123456789012345678901234567890
+  booleanField: true
+  stringField: hello world
+  singleChild: null
+  childrenList: null
+  childrenMap: null
+- &reference1
+  singleChild: *reference0
+- &reference2
+  childrenList:
+  - *reference0
+  - *reference1
+- childrenMap:
+    reference0: *reference0
+    reference1: *reference1
+    reference2: *reference2
