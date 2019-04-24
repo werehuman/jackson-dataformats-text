@@ -1,0 +1,17 @@
+- &root
+  stringField: root
+  singleChild:
+    &childOfRoot
+    stringField: child of root
+    singleChild:
+      &childOfChildOfRoot
+      stringField: child of child of root
+  childrenList:
+    - *childOfRoot
+    - *childOfChildOfRoot
+  childrenMap:
+    childOfRoot: *childOfRoot
+    childOfChildOfRoot: *childOfChildOfRoot
+- *childOfChildOfRoot
+- *childOfRoot
+- *root

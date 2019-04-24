@@ -366,62 +366,62 @@ public class StreamingParseTest extends ModuleTestBase
         p.close();
     }
 
-    /**
-     * How should YAML Anchors be exposed?
-     */
-    public void testAnchorParsing() throws Exception
-    {
-        // silly doc, just to expose an id (anchor) and ref to it
-        final String YAML = "---\n"
-                +"parent: &id1\n"
-                +"    name: Bob\n"
-                +"child: &id2\n"
-                +"    name: Bill\n"
-                +"    parentRef: *id1"
-                ;
-        YAMLParser yp = (YAMLParser)MAPPER.createParser(YAML);
-
-        assertToken(JsonToken.START_OBJECT, yp.nextToken());
-        assertFalse(yp.isCurrentAlias());
-        assertNull(yp.getObjectId());
-
-        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
-        assertEquals("parent", yp.currentName());
-        assertFalse(yp.isCurrentAlias());
-        assertNull(yp.getObjectId());
-
-        assertToken(JsonToken.START_OBJECT, yp.nextToken());
-        assertFalse(yp.isCurrentAlias());
-        assertEquals("id1", yp.getObjectId());
-        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
-        assertEquals("name", yp.currentName());
-        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
-        assertEquals("Bob", yp.getText());
-        assertFalse(yp.isCurrentAlias());
-        assertToken(JsonToken.END_OBJECT, yp.nextToken());
-
-        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
-        assertEquals("child", yp.currentName());
-        assertFalse(yp.isCurrentAlias());
-        assertToken(JsonToken.START_OBJECT, yp.nextToken());
-        assertFalse(yp.isCurrentAlias());
-        assertEquals("id2", yp.getObjectId());
-        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
-        assertEquals("name", yp.currentName());
-        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
-        assertEquals("Bill", yp.getText());
-        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
-        assertEquals("parentRef", yp.currentName());
-        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
-        assertEquals("id1", yp.getText());
-        assertTrue(yp.isCurrentAlias());
-        assertToken(JsonToken.END_OBJECT, yp.nextToken());
-
-        assertToken(JsonToken.END_OBJECT, yp.nextToken());
-
-        assertNull(yp.nextToken());
-        yp.close();
-    }
+//    /**
+//     * How should YAML Anchors be exposed?
+//     */
+//    public void testAnchorParsing() throws Exception
+//    {
+//        // silly doc, just to expose an id (anchor) and ref to it
+//        final String YAML = "---\n"
+//                +"parent: &id1\n"
+//                +"    name: Bob\n"
+//                +"child: &id2\n"
+//                +"    name: Bill\n"
+//                +"    parentRef: *id1"
+//                ;
+//        YAMLParser yp = (YAMLParser)MAPPER.createParser(YAML);
+//
+//        assertToken(JsonToken.START_OBJECT, yp.nextToken());
+//        assertFalse(yp.isCurrentAlias());
+//        assertNull(yp.getObjectId());
+//
+//        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
+//        assertEquals("parent", yp.currentName());
+//        assertFalse(yp.isCurrentAlias());
+//        assertNull(yp.getObjectId());
+//
+//        assertToken(JsonToken.START_OBJECT, yp.nextToken());
+//        assertFalse(yp.isCurrentAlias());
+//        assertEquals("id1", yp.getObjectId());
+//        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
+//        assertEquals("name", yp.currentName());
+//        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
+//        assertEquals("Bob", yp.getText());
+//        assertFalse(yp.isCurrentAlias());
+//        assertToken(JsonToken.END_OBJECT, yp.nextToken());
+//
+//        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
+//        assertEquals("child", yp.currentName());
+//        assertFalse(yp.isCurrentAlias());
+//        assertToken(JsonToken.START_OBJECT, yp.nextToken());
+//        assertFalse(yp.isCurrentAlias());
+//        assertEquals("id2", yp.getObjectId());
+//        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
+//        assertEquals("name", yp.currentName());
+//        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
+//        assertEquals("Bill", yp.getText());
+//        assertToken(JsonToken.FIELD_NAME, yp.nextToken());
+//        assertEquals("parentRef", yp.currentName());
+//        assertToken(JsonToken.VALUE_STRING, yp.nextToken());
+//        assertEquals("id1", yp.getText());
+//        assertTrue(yp.isCurrentAlias());
+//        assertToken(JsonToken.END_OBJECT, yp.nextToken());
+//
+//        assertToken(JsonToken.END_OBJECT, yp.nextToken());
+//
+//        assertNull(yp.nextToken());
+//        yp.close();
+//    }
 
     // [Issue#10]
     // Scalars should not be parsed when not in the plain flow style.

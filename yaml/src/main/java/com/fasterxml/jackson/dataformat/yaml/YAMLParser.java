@@ -3,6 +3,7 @@ package com.fasterxml.jackson.dataformat.yaml;
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -135,14 +136,17 @@ public class YAMLParser extends ParserBase
      * Flag that is set when current token was derived from an Alias
      * (reference to another value's anchor)
      */
-    protected boolean _currentIsAlias;
+    //protected boolean _currentIsAlias;
 
     /**
      * Anchor for the value that parser currently points to: in case of
      * structured types, value whose first token current token is.
      */
-    protected Optional<Anchor> _currentAnchor;
-    
+    //protected Optional<Anchor> _currentAnchor;
+
+    protected final AnchorTracker _anchorTracker = new AnchorTracker();
+    protected Iterator<AnchorTracker.JsonTokenWithPayload> _tokensFromAnchor;
+
     /*
     /**********************************************************************
     /* Life-cycle
@@ -165,14 +169,15 @@ public class YAMLParser extends ParserBase
     /**********************************************************                              
      */
 
-    /**
-     * Method that can be used to check whether current token was
-     * created from YAML Alias token (reference to an anchor).
-     */
-    public boolean isCurrentAlias() {
-        return _currentIsAlias;
-    }
-
+//    /**
+//     * Method that can be used to check whether current token was
+//     * created from YAML Alias token (reference to an anchor).
+//     */
+//    public boolean isCurrentAlias() {
+//        throw new UnsupportedOperationException();
+//        //return _currentIsAlias;
+//    }
+//
     /**
      * Method that can be used to check if the current token has an
      * associated anchor (id to reference via Alias)
@@ -282,7 +287,15 @@ public class YAMLParser extends ParserBase
     @Override
     public JsonToken nextToken() throws IOException
     {
-        _currentIsAlias = false;
+        if (_tokensFromAnchor != null) {
+            if (_tokensFromAnchor.hasNext()) {
+                return _updateFromToken(_tokensFromAnchor.next());
+            } else {
+                _tokensFromAnchor = null;
+            }
+        }
+
+        //_currentIsAlias = false;
         _binaryValue = null;
         if (_closed) {
             return null;
@@ -297,7 +310,7 @@ public class YAMLParser extends ParserBase
             }
             // is null ok? Assume it is, for now, consider to be same as end-of-doc
             if (evt == null) {
-                _currentAnchor = Optional.empty();
+                //_currentAnchor = Optional.empty();
                 return (_currToken = null);
             }
             _lastEvent = evt;
@@ -307,14 +320,14 @@ public class YAMLParser extends ParserBase
             if (_parsingContext.inObject()) {
                 if (_currToken != JsonToken.FIELD_NAME) {
                     if (evt.getEventId() != Event.ID.Scalar) {
-                        _currentAnchor = Optional.empty();
+                        //_currentAnchor = Optional.empty();
                         // end is fine
                         if (evt.getEventId() == Event.ID.MappingEnd) {
                             if (!_parsingContext.inObject()) { // sanity check is optional, but let's do it for now
                                 _reportMismatchedEndMarker('}', ']');
                             }
                             _parsingContext = _parsingContext.getParent();
-                            return (_currToken = JsonToken.END_OBJECT);
+                            return _feedAnchorTracker(JsonToken.END_OBJECT, evt);
                         }
                         _reportError("Expected a field name (Scalar value in YAML), got this instead: "+evt);
                     }
@@ -325,33 +338,31 @@ public class YAMLParser extends ParserBase
                     //  ... not even 100% sure this is correct, or robust, but does appear to work for specific
                     //  test case given.
                     final ScalarEvent scalar = (ScalarEvent) evt;
-                    final Optional<Anchor> newAnchor = scalar.getAnchor();
-                    if (newAnchor.isPresent() || (_currToken != JsonToken.START_OBJECT)) {
-                        _currentAnchor = scalar.getAnchor();
-                    }
+                    //final Optional<Anchor> newAnchor = scalar.getAnchor();
+//                    if (newAnchor.isPresent() || (_currToken != JsonToken.START_OBJECT)) {
+//                        _currentAnchor = scalar.getAnchor();
+//                    }
                     final String name = scalar.getValue();
                     _currentFieldName = name;
                     _parsingContext.setCurrentName(name);
-                    return (_currToken = JsonToken.FIELD_NAME);
+                    return _feedAnchorTracker(JsonToken.FIELD_NAME, evt);
                 }
             }
 
-            _currentAnchor = Optional.empty();
+//            _currentAnchor = Optional.empty();
 
             switch (evt.getEventId()) {
                 case Scalar:
                     // scalar values are probably the commonest:
                     JsonToken t = _decodeScalar((ScalarEvent) evt);
-                    _currToken = t;
-                    return t;
+                    return _feedAnchorTracker(t, evt);
                 case MappingStart:
                     // followed by maps, then arrays
                     Optional<Mark> m = evt.getStartMark();
                     MappingStartEvent map = (MappingStartEvent) evt;
-                    _currentAnchor = map.getAnchor();
                     _parsingContext = _parsingContext.createChildObjectContext(
                             m.map(mark -> mark.getLine()).orElse(0), m.map(mark -> mark.getColumn()).orElse(0));
-                    return (_currToken = JsonToken.START_OBJECT);
+                    return _feedAnchorTracker(JsonToken.START_OBJECT, evt);
 
                 case MappingEnd:
                     // actually error; can not have map-end here
@@ -359,17 +370,16 @@ public class YAMLParser extends ParserBase
 
                 case SequenceStart:
                     Optional<Mark> mrk = evt.getStartMark();
-                    _currentAnchor = ((NodeEvent) evt).getAnchor();
                     _parsingContext = _parsingContext.createChildArrayContext(
                             mrk.map(mark -> mark.getLine()).orElse(0), mrk.map(mark -> mark.getColumn()).orElse(0));
-                    return (_currToken = JsonToken.START_ARRAY);
+                    return _feedAnchorTracker(JsonToken.START_ARRAY, evt);
 
                 case SequenceEnd:
                     if (!_parsingContext.inArray()) { // sanity check is optional, but let's do it for now
                         _reportMismatchedEndMarker(']', '}');
                     }
                     _parsingContext = _parsingContext.getParent();
-                    return (_currToken = JsonToken.END_ARRAY);
+                    return _feedAnchorTracker(JsonToken.END_ARRAY, evt);
 
                 // after this, less common tokens:
                 case DocumentEnd:
@@ -385,12 +395,17 @@ public class YAMLParser extends ParserBase
                     continue;
 
                 case Alias:
-                    AliasEvent alias = (AliasEvent) evt;
-                    _currentIsAlias = true;
-                    _textValue = alias.getAnchor().orElseThrow(() -> new RuntimeException("Alias must be provided.")).getAnchor();
-                    _cleanedTextValue = null;
-                    // for now, nothing to do: in future, maybe try to expose as ObjectIds?
-                    return (_currToken = JsonToken.VALUE_STRING);
+                    Anchor anchor = ((AliasEvent) evt).getAnchor()
+                            .orElseThrow(() -> new RuntimeException("Alias must be provided."));
+                    _tokensFromAnchor = _anchorTracker.getTokensForAnchor(anchor).iterator();
+                    // TODO check that has next, it always should have
+                    return _updateFromToken(_tokensFromAnchor.next());
+//                    AliasEvent alias = (AliasEvent) evt;
+//                    //_currentIsAlias = true;
+//                    _textValue = alias.getAnchor().orElseThrow(() -> new RuntimeException("Alias must be provided.")).getAnchor();
+//                    _cleanedTextValue = null;
+//                    // for now, nothing to do: in future, maybe try to expose as ObjectIds?
+//                    return (_currToken = JsonToken.VALUE_STRING);
 
                 case StreamEnd:
                     // end-of-input; force closure
@@ -402,6 +417,35 @@ public class YAMLParser extends ParserBase
                     continue;
             }
         }
+    }
+
+    private JsonToken _updateFromToken(AnchorTracker.JsonTokenWithPayload source) throws IOException
+    {
+        _currToken = source.jsonToken;
+        if (source.scalarEvent != null) {
+            if (source.jsonToken == JsonToken.FIELD_NAME) {
+                _currentFieldName = source.scalarEvent.getValue();
+            } else {
+                _decodeScalar(source.scalarEvent);
+            }
+        }
+        _anchorTracker.feed(null, source.scalarEvent, _currToken);
+        return _currToken;
+    }
+
+    protected JsonToken _feedAnchorTracker(JsonToken result, Event event)
+    {
+        _currToken = result;
+        Anchor anchor = null;
+        ScalarEvent scalarEvent = null;
+        if (event instanceof NodeEvent) {
+            anchor = ((NodeEvent) event).getAnchor().orElse(null);
+        }
+        if (event instanceof ScalarEvent) {
+            scalarEvent = (ScalarEvent) event;
+        }
+        _anchorTracker.feed(anchor, scalarEvent, _currToken);
+        return _currToken;
     }
 
     protected JsonToken _decodeScalar(ScalarEvent scalar) throws IOException
@@ -775,7 +819,8 @@ public class YAMLParser extends ParserBase
     @Override
     public String getObjectId() throws IOException
     {
-        return _currentAnchor.map(a -> a.getAnchor()).orElse(null);
+        //return _currentAnchor.map(a -> a.getAnchor()).orElse(null);
+        return null;
     }
 
     @Override

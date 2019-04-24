@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.ModuleTestBase;
 
+import static org.junit.Assert.assertArrayEquals;
+
 /**
  * Unit tests for checking functioning of the databinding
  * on top of YAML layer.
@@ -35,7 +37,7 @@ public class DatabindReadTest extends ModuleTestBase
      */
 
     private final ObjectMapper MAPPER = newObjectMapper();
-    
+
     public void testSimpleNested() throws Exception
     {
         final String YAML =
@@ -59,9 +61,9 @@ public class DatabindReadTest extends ModuleTestBase
         assertEquals(outer.name.first, outer2.name.first);
         assertEquals(outer.name.last, outer2.name.last);
         assertEquals(outer.age, outer2.age);
-        
+
     }
-    
+
     public void testBasicUntyped() throws Exception
     {
         final String YAML =
@@ -88,8 +90,8 @@ public class DatabindReadTest extends ModuleTestBase
     {
         final String YAML =
 "firstName: Billy\n"
-+"lastName: Baggins\n"                
-+"gender: MALE\n"        
++"lastName: Baggins\n"
++"gender: MALE\n"
 +"verified: true\n"
 +"userImage: AQIDBAU=" // [1,2,3,4,5]
 ;
@@ -100,7 +102,7 @@ public class DatabindReadTest extends ModuleTestBase
         assertTrue(user.isVerified());
         byte[] data = user.getUserImage();
         assertNotNull(data);
-        Assert.assertArrayEquals(new byte[] { 1, 2, 3, 4, 5 }, data);
+        assertArrayEquals(new byte[] { 1, 2, 3, 4, 5 }, data);
     }
 
     public void testIssue1() throws Exception
@@ -116,9 +118,9 @@ public class DatabindReadTest extends ModuleTestBase
     {
         UUID uuid = new UUID(0, 0);
         String yaml = MAPPER.writeValueAsString(uuid);
-        
+
         UUID result = MAPPER.readValue(yaml, UUID.class);
-        
+
         assertEquals(uuid, result);
     }
 
@@ -128,7 +130,7 @@ public class DatabindReadTest extends ModuleTestBase
                 .without(SerializationFeature.FAIL_ON_EMPTY_BEANS)
                 .writeValueAsString(new EmptyBean());
         yaml = yaml.trim();
-        
+
         // let's be bit more robust; may or may not get doc marker
         if (yaml.startsWith("---")) {
             yaml = yaml.substring(3);
